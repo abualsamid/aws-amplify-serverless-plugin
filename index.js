@@ -114,34 +114,60 @@ class ServerlessAmplifyPlugin {
         for (let i = 0 ; i < resources.length ; i++) {
             const resource = resources[i];
             switch (resource.ResourceType) {
-                case 'AWS::AppSync::GraphQLApi':
-                    this.log('debug', `Processing ${JSON.stringify(resource)}`);
-                    const appSyncId = resource.PhysicalResourceId.split('/')[1];
-                    let appSyncMetaData = await this.fetch('AppSync', 'getGraphqlApi', { apiId: appSyncId });
-                    let appSyncSchema = await this.fetch('AppSync', 'getIntrospectionSchema', { apiId: appSyncId, format: 'JSON' });
-                    detailedResources.push(Object.assign({}, resource, { metadata: appSyncMetaData, schema:  JSON.parse(appSyncSchema.schema.toString()) }));
-                    break;
-                case 'AWS::Cognito::IdentityPool':
-                    this.log('debug', `Processing ${JSON.stringify(resource)}`);
-                    let idpMetadata = await this.fetch('CognitoIdentity', 'describeIdentityPool', { IdentityPoolId: resource.PhysicalResourceId });
-                    detailedResources.push(Object.assign({}, resource, { metadata: idpMetadata }));
-                    break;
-                case 'AWS::Cognito::UserPool':
-                    this.log('debug', `Processing ${JSON.stringify(resource)}`);
-                    const userPoolMetaData = await this.fetch('CognitoIdentityServiceProvider', 'describeUserPool', { UserPoolId: resource.PhysicalResourceId });
-                    detailedResources.push(Object.assign({}, resource, { metadata: userPoolMetaData }));
-                    break;
-                case 'AWS::S3::Bucket':
-                    this.log('debug', `Processing ${JSON.stringify(resource)}`);
-                    detailedResources.push(resource);   // We have all the details we need for this
-                    break;
-                case 'AWS::ApiGateway::RestApi':
-                    this.log('debug', `Processing ${JSON.stringify(resource)}`);
-                    detailedResources.push(resource);
-                    break;
-                default:
-                    this.log('debug', `Skipping ${JSON.stringify(resource)}`);
-                    break;
+              case 'AWS::AppSync::GraphQLApi':
+                this.log('debug', `Processing ${JSON.stringify(resource)}`)
+                const appSyncId = resource.PhysicalResourceId.split('/')[1]
+                let appSyncMetaData = await this.fetch(
+                  'AppSync',
+                  'getGraphqlApi',
+                  { apiId: appSyncId }
+                )
+                let appSyncSchema = await this.fetch(
+                  'AppSync',
+                  'getIntrospectionSchema',
+                  { apiId: appSyncId, format: 'JSON' }
+                )
+                detailedResources.push(
+                  Object.assign({}, resource, {
+                    metadata: appSyncMetaData,
+                    schema: JSON.parse(appSyncSchema.schema.toString()),
+                  })
+                )
+                break
+              case 'AWS::Cognito::IdentityPool':
+                this.log('debug', `Processing ${JSON.stringify(resource)}`)
+                let idpMetadata = await this.fetch(
+                  'CognitoIdentity',
+                  'describeIdentityPool',
+                  { IdentityPoolId: resource.PhysicalResourceId }
+                )
+                detailedResources.push(
+                  Object.assign({}, resource, { metadata: idpMetadata })
+                )
+                break
+              case 'AWS::Cognito::UserPool':
+                this.log('debug', `Processing ${JSON.stringify(resource)}`)
+                const userPoolMetaData = await this.fetch(
+                  'CognitoIdentityServiceProvider',
+                  'describeUserPool',
+                  { UserPoolId: resource.PhysicalResourceId }
+                )
+                detailedResources.push(
+                  Object.assign({}, resource, { metadata: userPoolMetaData })
+                )
+                break
+              case 'AWS::S3::Bucket':
+                this.log('debug', `Processing ${JSON.stringify(resource)}`)
+                detailedResources.push(resource) // We have all the details we need for this
+                break
+              case 'AWS::ApiGateway::RestApi':
+              case 'AWS::ApiGatewayV2::Api':
+                this.log('debug', `Processing ${JSON.stringify(resource)}`)
+                detailedResources.push(resource)
+                break
+              default:
+                this.log('debug', `Skipping ${JSON.stringify(resource)}`)
+                break
             }
         }
 
@@ -335,17 +361,26 @@ class ServerlessAmplifyPlugin {
             }
         }
 
-        let apigw = resources.filter(r => r.ResourceType === 'AWS::ApiGateway::RestApi');
+        let apigw = resources.filter(
+          (r) =>
+            r.ResourceType === 'AWS::ApiGateway::RestApi' ||
+            r.ResourceType === 'AWS::ApiGatewayV2::Api'
+        )
         if (apigw.length > 0) {
             let apiRecords = {};
             apigw.forEach((v) => {
+                const stage =
+                v.ResourceType === 'AWS::ApiGateway::RestApi'
+                ? this.provider.getStage()
+                : ''
                 apiRecords[v.LogicalResourceId] = {
-                    Endpoint: `https://${v.PhysicalResourceId}.execute-api.${this.provider.getRegion()}.amazonaws.com/${this.provider.getStage()}`,
+                    Endpoint: `https://${v.PhysicalResourceId}.execute-api.${this.provider.getRegion()}.amazonaws.com/${stage}`,
                     Region: this.provider.getRegion()
                 };
             });
             config.APIGateway = apiRecords;
         }
+
 
         this.writeConfigurationFile(fileDetails.filename, JSON.stringify(config, null, 2));
     }
@@ -434,12 +469,20 @@ class ServerlessAmplifyPlugin {
             }
         }
 
-        let apigw = resources.filter(r => r.ResourceType === 'AWS::ApiGateway::RestApi');
+        let apigw = resources.filter(
+          (r) =>
+            r.ResourceType === 'AWS::ApiGateway::RestApi' ||
+            r.ResourceType === 'AWS::ApiGatewayV2::Api'
+        )
         if (apigw.length > 0) {
             let apiRecords = [];
             apigw.forEach((v) => {
+                const stage =
+                    v.ResourceType === 'AWS::ApiGateway::RestApi'
+                    ? this.provider.getStage()
+                    : ''
                 apiRecords.push({
-                    endpoint: `https://${v.PhysicalResourceId}.execute-api.${this.provider.getRegion()}.amazonaws.com/${this.provider.getStage()}`,
+                    endpoint: `https://${v.PhysicalResourceId}.execute-api.${this.provider.getRegion()}.amazonaws.com/${stage}`,
                     name: v.LogicalResourceId,
                     region: this.provider.getRegion()
                 });
